@@ -51,7 +51,7 @@ def PitcherVsTeam(df):
         'database': 'mlbPlayers',
         'raise_on_warnings': True,}
         
-    result = []
+    DF_list = []
     cnx = mysql.connector.connect(**config)    
     cursor = cnx.cursor()
     num_games = len(df.index)
@@ -97,17 +97,18 @@ def PitcherVsTeam(df):
             home_pitcher_name = home_pitcher_data[1]
             home_PvsB = html_parser(home_pitcher_data, Home_ID, Away_ID, "HOME")
             home_Team_DF = team_DF_generator(home_PvsB, home_pitcher_name, home_team, away_team, "AWAY")
-            result.append(home_Team_DF)
+            DF_list.append(home_Team_DF)
 
         if AWAY_flag and len(away_pitcher_data) > 1:
             away_pitcher_name = away_pitcher_data[1]
             away_PvsB = html_parser(away_pitcher_data, Home_ID, Away_ID, "AWAY")
             away_Team_DF = team_DF_generator(away_PvsB, away_pitcher_name, home_team, away_team, "HOME")
-            result.append(away_Team_DF)
+            DF_list.append(away_Team_DF)
 
         print(f"Completed {n}...")
 
-    return result
+    return DF_list
+
 
 def html_parser(pitcher_data, Home_ID, Away_ID, pitcher_team):
 

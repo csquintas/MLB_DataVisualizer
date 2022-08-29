@@ -44,7 +44,7 @@ def PitcherVsTeam(df):
     
     config = {
         'user': 'root',
-        'password': 'Qdog176782',
+        'password': 'xxxxx',
         'host': '127.0.0.1',
         'port': '3306',
         'database': 'mlbPlayers',

@@ -120,7 +120,7 @@ class GameDay:
         self.game_DF["Home Pitcher"] = home_pitcher_list
         self.game_DF["Away Pitcher"] = away_pitcher_list
         self.game_DF["Weather"] = weather_list
-        print(f"DataFrame of Games on {self.date}: {self.game_DF}")
+        print(f"DataFrame of Games on {self.date}:")
         return self.game_DF
     
    

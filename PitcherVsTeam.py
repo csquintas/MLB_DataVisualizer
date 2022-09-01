@@ -7,6 +7,7 @@ import json
 import ast
 import pandas as pd
 import re
+from config import * #SQL DB info
 
 def PitcherVsTeam(df):
 
@@ -43,14 +44,8 @@ def PitcherVsTeam(df):
                 "Washington Nationals":120,
             }  
     
-    config = {
-        'user': 'root',
-        'password': 'Qdog176782',
-        'host': '127.0.0.1',
-        'port': '3306',
-        'database': 'mlbPlayers',
-        'raise_on_warnings': True,}
-        
+    config = config 
+
     DF_list = []
     cnx = mysql.connector.connect(**config)    
     cursor = cnx.cursor()

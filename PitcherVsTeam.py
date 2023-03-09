@@ -1,52 +1,16 @@
-from turtle import home
+from urllib.request import urlopen, Request
+from SQLconfig import config #SQL DB info
+from teamInfo import team_id_lookup
 import mysql.connector
-from bs4 import BeautifulSoup
-from urllib.request import urlopen
-import requests
-import json
 import ast
 import pandas as pd
 import re
-from config import * #SQL DB info
 
 def PitcherVsTeam(df):
-
-    team_id_lookup =  {
-                "Los Angeles Angels":108,
-                "Arizona Diamondbacks":109,
-                "Atlanta Braves":144,
-                "Baltimore Orioles":110,
-                "Boston Red Sox":111,
-                "Chicago Cubs":112,
-                "Chicago White Sox":145,
-                "Cincinnati Reds":113,
-                "Cleveland Guardians":114,
-                "Colorado Rockies":115,
-                "Detroit Tigers":116,
-                "Miami Marlins":146,
-                "Houston Astros":117,
-                "Kansas City Royals":118,
-                "Los Angeles Dodgers":119,
-                "Milwaukee Brewers":158,
-                "Minnesota Twins":142,
-                "New York Mets":121,
-                "New York Yankees":147,
-                "Oakland Athletics":133,
-                "Philadelphia Phillies":143,
-                "Pittsburgh Pirates":134,
-                "St. Louis Cardinals":138,
-                "San Diego Padres":135,
-                "San Francisco Giants":137,
-                "Seattle Mariners":136,
-                "Tampa Bay Rays":139,
-                "Texas Rangers":140,
-                "Toronto Blue Jays":141,
-                "Washington Nationals":120,
-            }  
     
-    config = config 
-
     DF_list = []
+    DF_list_unstyled = []
+
     cnx = mysql.connector.connect(**config)    
     cursor = cnx.cursor()
     num_games = len(df.index)
@@ -54,11 +18,17 @@ def PitcherVsTeam(df):
     url = "https://baseballsavant.mlb.com/player_matchup?type=batter&teamPitching={Pitching_Team_ID}&teamBatting={Batting_Team_ID}&player_id={Pitcher_ID}"
 
     for n in range(num_games):
-        print(f"Processing {n}...")
+        print(f"Processing {n+1} of {num_games-1}...")
         game = df.iloc[n]
 
         matchup = game['Game']
-        home_team = matchup.split(' @ ')[1]
+        
+        # Double Header Breaks it
+        if "Game" in matchup:
+            home_team = matchup.split(' @ ')[1][:-7]
+        else:
+            home_team = matchup.split(' @ ')[1]
+            
         away_team = matchup.split(' @ ')[0]
         Home_ID = team_id_lookup[home_team]
         Away_ID = team_id_lookup[away_team]
@@ -69,6 +39,7 @@ def PitcherVsTeam(df):
         AWAY_flag = 0
 
         if home_pitcher != "":
+            home_pitcher_data = []
             HOME_flag = 1
             query = f"SELECT * FROM playerdetailsmap WHERE MLBNAME LIKE '{home_pitcher}'"
             with cnx.cursor() as cursor:
@@ -78,6 +49,7 @@ def PitcherVsTeam(df):
                     continue
             
         if away_pitcher != "":
+            away_pitcher_data = []
             AWAY_flag = 1
             query = f"SELECT * FROM playerdetailsmap WHERE MLBNAME LIKE '{away_pitcher}'"
             with cnx.cursor() as cursor:
@@ -86,23 +58,24 @@ def PitcherVsTeam(df):
                 for away_pitcher_data in result:
                     continue   
 
-
-
         if HOME_flag and len(home_pitcher_data) > 1:
             home_pitcher_name = home_pitcher_data[1]
             home_PvsB = html_parser(home_pitcher_data, Home_ID, Away_ID, "HOME")
-            home_Team_DF = team_DF_generator(home_PvsB, home_pitcher_name, home_team, away_team, "AWAY")
+            home_Team_DF, home_Team_DF_unstyled = team_DF_generator(home_PvsB, home_pitcher_name, home_team, away_team, "AWAY")
             DF_list.append(home_Team_DF)
+            DF_list_unstyled.append(home_Team_DF_unstyled)
+
 
         if AWAY_flag and len(away_pitcher_data) > 1:
             away_pitcher_name = away_pitcher_data[1]
             away_PvsB = html_parser(away_pitcher_data, Home_ID, Away_ID, "AWAY")
-            away_Team_DF = team_DF_generator(away_PvsB, away_pitcher_name, home_team, away_team, "HOME")
+            away_Team_DF, away_Team_DF_unstyled = team_DF_generator(away_PvsB, away_pitcher_name, home_team, away_team, "HOME")
             DF_list.append(away_Team_DF)
+            DF_list_unstyled.append(away_Team_DF_unstyled)
 
-        print(f"Completed {n}...")
+        print(f"Completed {n+1}...")
 
-    return DF_list
+    return DF_list, DF_list_unstyled
 
 
 def html_parser(pitcher_data, Home_ID, Away_ID, pitcher_team):
@@ -118,9 +91,15 @@ def html_parser(pitcher_data, Home_ID, Away_ID, pitcher_team):
         else:
             print("html_parser must be called with 'HOME' or 'AWAY' flags")
      
-
-        page = urlopen(pitcher_search)
-        html = page.read().decode("utf-8")
+        # act as a browser
+        try:
+            page = urlopen(pitcher_search)
+            html = page.read().decode("utf-8")
+        except:
+            req = Request(
+                        url=pitcher_search, 
+                        headers={'User-Agent': 'Mozilla/5.0'})
+            html = urlopen(req).read().decode("utf-8")
 
         pattern ="var data =.*\\n"
         match_results = re.search(pattern,html, re.IGNORECASE)
@@ -129,7 +108,6 @@ def html_parser(pitcher_data, Home_ID, Away_ID, pitcher_team):
         PvsB = re.sub(";\n", "", PvsB) # Remove HTML tags
         PvsB = re.sub("null","None", PvsB) # Remove HTML tags
         PvsB = ast.literal_eval(PvsB)
-
         return PvsB   
 
 def team_DF_generator(PvsB, pitcher, home_team, away_team, hitting_team):
@@ -162,13 +140,14 @@ def team_DF_generator(PvsB, pitcher, home_team, away_team, hitting_team):
             triples.append(player_data['triples'])
             hr.append(player_data['hrs'])
             so.append(player_data['so'])
-            kpercent.append(player_data['k_percent'])
-            whiffpercent.append(player_data['swing_miss_percent'])
             bb.append(player_data['bb'])
-            ba.append(player_data['ba'])
-            slg.append(player_data['slg'])
-            xba.append(player_data['xba'])
-            xslg.append(player_data['xslg'])
+
+            kpercent.append(round(0 if player_data['k_percent'] is None else player_data['k_percent'],1))
+            whiffpercent.append(round(0 if player_data['swing_miss_percent'] is None else player_data['swing_miss_percent'],1))
+            ba.append(round(0 if player_data['ba'] is None else player_data['ba'],3))
+            slg.append(round(0 if player_data['slg'] is None else player_data['slg'],3))
+            xba.append(round(0 if player_data['xba'] is None else player_data['xba'],3))
+            xslg.append(round(0 if player_data['xslg'] is None else player_data['xslg'],3))
 
         Team_DF["Player"] = player_list
         Team_DF["PA"] = pa
@@ -184,13 +163,14 @@ def team_DF_generator(PvsB, pitcher, home_team, away_team, hitting_team):
         Team_DF["BA"] = ba
         Team_DF["SLG"] = slg
         Team_DF["xBA"] = xba
-        Team_DF["xSLG"] = xslg   
+        Team_DF["xSLG"] = xslg 
 
         if hitting_team == "HOME":
             caption = f"{home_team} Historical Batting Stats Against {pitcher}"
         elif hitting_team == "AWAY":
             caption = f"{away_team} Historical Batting Stats Against {pitcher}"
-
+        
+        Team_DF_unstyled = Team_DF.copy()
         Team_DF = Team_DF.style.set_caption(caption)
 
-        return Team_DF
+        return Team_DF, Team_DF_unstyled
